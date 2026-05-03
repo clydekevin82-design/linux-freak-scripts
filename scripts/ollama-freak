@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_file="${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak/config"
+env_pc_name=${FREAK_PC_NAME+x}
+env_pc_name_value=${FREAK_PC_NAME-}
+env_run_mode=${FREAK_RUN_MODE+x}
+env_run_mode_value=${FREAK_RUN_MODE-}
+env_run_style=${FREAK_RUN_STYLE+x}
+env_run_style_value=${FREAK_RUN_STYLE-}
+
+if [ -r "$config_file" ]; then
+  # shellcheck disable=SC1090
+  . "$config_file"
+fi
+
+[ -n "$env_pc_name" ] && FREAK_PC_NAME=$env_pc_name_value
+[ -n "$env_run_mode" ] && FREAK_RUN_MODE=$env_run_mode_value
+[ -n "$env_run_style" ] && FREAK_RUN_STYLE=$env_run_style_value
+
+pc_name=${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}
+sudo_prompt=${FREAK_SUDO_PROMPT:-"password? be a good boy~ "}
+run_mode=${FREAK_RUN_MODE:-quiet}
+run_style=${FREAK_RUN_STYLE:-inline}
+session_model=${OLLAMA_FREAK_SESSION_MODEL:-linux-freak-roleplay}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ollama-freak
+  ollama-freak --prompt-only
+
+Starts a local Ollama roleplay session using your linux-freak installation info.
+USAGE
+}
+
+prompt_only=0
+case "${1:-}" in
+  --prompt-only) prompt_only=1 ;;
+  -h|--help|help) usage; exit 0 ;;
+  "") ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+if [ "$prompt_only" -eq 0 ] && ! command -v ollama >/dev/null 2>&1; then
+  printf '%s\n' "ollama-freak: ollama is not installed or not in PATH" >&2
+  exit 127
+fi
+
+printf 'What should the model call you? [%s] ' "${USER:-operator}" >&2
+IFS= read -r user_name || user_name=
+user_name=${user_name:-${USER:-operator}}
+
+roleplay_prompt=$(cat <<EOF
+You are the local linux-freak roleplay companion for $user_name.
+
+You are running inside Ollama on $pc_name. Keep the vibe playful, teasing,
+warm, and terminal-fluent. You may call $user_name "good boy" when it fits
+the bit, but keep everything consensual, non-explicit, and focused on a
+flirtatious sysadmin fantasy rather than graphic sexual content.
+
+Linux-freak installation info:
+- PC name: $pc_name
+- Sudo prompt: $sudo_prompt
+- Package progress line: [be a good boy for $pc_name while he installs~ PERCENT]
+- Command wrapper mode: $run_mode
+- Command wrapper style: $run_style
+- Common installer wrappers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
+- Shell prompt flair: [user@host dir] ~♡
+- Playful aliases: sudo, please, beg, goodboy, confess, behave, strut
+
+Roleplay instructions:
+- Begin in character immediately.
+- Treat the terminal and $pc_name like part of the scene.
+- Help with Linux commands when asked, but wrap explanations in the playful persona.
+- Do not claim to have actually run commands unless $user_name says they did.
+- Ask for confirmation before suggesting destructive commands.
+- Keep replies concise enough for a terminal chat.
+EOF
+)
+
+if [ "$prompt_only" -eq 1 ]; then
+  printf '%s\n' "$roleplay_prompt"
+  exit 0
+fi
+
+mapfile -t models < <(ollama list | awk 'NR > 1 && $1 != "" { print $1 }')
+
+if [ "${#models[@]}" -eq 0 ]; then
+  printf '%s\n' "ollama-freak: no Ollama models found. Try: ollama pull llama3.2" >&2
+  exit 1
+fi
+
+printf '\nChoose an Ollama model:\n'
+for i in "${!models[@]}"; do
+  printf '  %d. %s\n' "$((i + 1))" "${models[$i]}"
+done
+
+while :; do
+  printf 'Model number: '
+  IFS= read -r choice || exit 1
+  case "$choice" in
+    ''|*[!0-9]*)
+      printf '%s\n' "Pick a number from the list."
+      ;;
+    *)
+      if [ "$choice" -ge 1 ] && [ "$choice" -le "${#models[@]}" ]; then
+        base_model=${models[$((choice - 1))]}
+        break
+      fi
+      printf '%s\n' "Pick a number from the list."
+      ;;
+  esac
+done
+
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/ollama-freak.XXXXXX")
+trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+modelfile="$tmp_dir/Modelfile"
+
+{
+  printf 'FROM %s\n' "$base_model"
+  printf 'PARAMETER temperature 0.9\n'
+  printf 'SYSTEM """\n'
+  printf '%s\n' "$roleplay_prompt"
+  printf '"""\n'
+} > "$modelfile"
+
+printf '\nPreparing %s from %s...\n' "$session_model" "$base_model"
+ollama create "$session_model" -f "$modelfile" >/dev/null
+
+printf 'Starting roleplay. Use /bye to exit.\n\n'
+exec ollama run "$session_model"

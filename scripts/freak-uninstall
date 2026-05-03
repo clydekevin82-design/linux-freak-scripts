@@ -20,7 +20,7 @@ remove_block "$HOME/.bashrc"
 remove_block "$HOME/.zshrc"
 remove_block "$HOME/.profile"
 
-rm -f "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
+rm -f "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/ollama-freak" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
 rm -f "$config_dir/freak-shell.sh" "$config_dir/config"
 rmdir "$config_dir" 2>/dev/null || true
 

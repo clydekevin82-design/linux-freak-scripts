@@ -17,6 +17,8 @@ patching PAM, changing `/etc/sudoers`, or making permanent system-wide edits.
   progress wrapper too.
 - Adds a few playful aliases like `please`, `beg`, and `confess`.
 - Adds a small prompt flourish when enabled.
+- Adds `ollama-freak`, a local Ollama roleplay launcher that uses your
+  linux-freak config as scene context.
 
 ## Install
 
@@ -36,12 +38,28 @@ Restart your shell, or run:
 ./scripts/freak-factor preview
 ./scripts/freak-sudo -v
 ./scripts/freak-run printf 'Installing 69%%\n'
+./scripts/ollama-freak --prompt-only
 ```
 
 During install, you can choose the PC name used in wrapped command output.
-After install, edit `~/.config/linux-freak/config` to change it. Set
-`FREAK_RUN_MODE=quiet` there if you want wrapped installers to hide normal
-output and only show the freaky progress lines.
+After install, edit `~/.config/linux-freak/config` to change it. The default
+wrapper mode hides normal installer output and updates one progress line in
+place. Set `FREAK_RUN_MODE=soft` if you want normal command output too, or
+`FREAK_RUN_STYLE=line` if you want every percent update on its own line.
+
+## Ollama roleplay
+
+```sh
+ollama-freak
+```
+
+It asks what the model should call you, lists installed Ollama models by
+number, creates a local session model named `linux-freak-roleplay`, and starts
+an interactive chat. Override the session model name with:
+
+```sh
+OLLAMA_FREAK_SESSION_MODEL=my-freak-session ollama-freak
+```
 
 ## Uninstall
 

@@ -24,7 +24,7 @@ if command -v freak-run >/dev/null 2>&1; then
 
   for freak_cmd in apt apt-get dnf yum pacman zypper flatpak snap paru yay emerge nix brew; do
     if command -v "$freak_cmd" >/dev/null 2>&1; then
-      alias "$freak_cmd=freak-run $freak_cmd"
+      alias "$freak_cmd=FREAK_RUN_MODE=quiet FREAK_RUN_STYLE=inline freak-run $freak_cmd"
     fi
   done
   unset freak_cmd

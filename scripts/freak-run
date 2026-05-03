@@ -2,14 +2,25 @@
 set -uo pipefail
 
 config_file="${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak/config"
+env_pc_name=${FREAK_PC_NAME+x}
+env_pc_name_value=${FREAK_PC_NAME-}
+env_mode=${FREAK_RUN_MODE+x}
+env_mode_value=${FREAK_RUN_MODE-}
+env_style=${FREAK_RUN_STYLE+x}
+env_style_value=${FREAK_RUN_STYLE-}
 
 if [ -r "$config_file" ]; then
   # shellcheck disable=SC1090
   . "$config_file"
 fi
 
+[ -n "$env_pc_name" ] && FREAK_PC_NAME=$env_pc_name_value
+[ -n "$env_mode" ] && FREAK_RUN_MODE=$env_mode_value
+[ -n "$env_style" ] && FREAK_RUN_STYLE=$env_style_value
+
 pc_name=${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}
-mode=${FREAK_RUN_MODE:-soft}
+mode=${FREAK_RUN_MODE:-quiet}
+style=${FREAK_RUN_STYLE:-inline}
 last_percent_file=$(mktemp "${TMPDIR:-/tmp}/freak-run.XXXXXX")
 trap 'rm -f "$last_percent_file"' EXIT HUP INT TERM
 
@@ -23,6 +34,7 @@ Wraps a command and decorates progress output.
 Environment:
   FREAK_PC_NAME        Name used in wrapper messages
   FREAK_RUN_MODE       soft or quiet
+  FREAK_RUN_STYLE      inline or line
 USAGE
 }
 
@@ -50,7 +62,11 @@ awk_script='
       p = "0%"
     }
     if (p != last) {
-      printf "[be a good boy for %s while he installs~ %s]\n", pc, p
+      if (style == "inline") {
+        printf "\r\033[K[be a good boy for %s while he installs~ %s]", pc, p
+      } else {
+        printf "[be a good boy for %s while he installs~ %s]\n", pc, p
+      }
       fflush()
       print p > last_file
       close(last_file)
@@ -61,8 +77,8 @@ awk_script='
   BEGIN {
     pc = ENVIRON["FREAK_PC_NAME_FOR_AWK"]
     mode = ENVIRON["FREAK_RUN_MODE_FOR_AWK"]
+    style = ENVIRON["FREAK_RUN_STYLE_FOR_AWK"]
     last_file = ENVIRON["FREAK_LAST_PERCENT_FILE_FOR_AWK"]
-    say("0%")
   }
 
   {
@@ -76,6 +92,10 @@ awk_script='
         p = substr(text, RSTART, RLENGTH)
         say(p)
       } else if (mode != "quiet" && text != "") {
+        if (style == "inline" && last != "") {
+          printf "\n"
+          last = ""
+        }
         print text
         fflush()
       }
@@ -86,6 +106,7 @@ awk_script='
 
 export FREAK_PC_NAME_FOR_AWK="$pc_name"
 export FREAK_RUN_MODE_FOR_AWK="$mode"
+export FREAK_RUN_STYLE_FOR_AWK="$style"
 export FREAK_LAST_PERCENT_FILE_FOR_AWK="$last_percent_file"
 
 "$cmd" "$@" 2>&1 | awk "$awk_script"
@@ -94,9 +115,19 @@ status=${PIPESTATUS[0]}
 last_percent=$(cat "$last_percent_file" 2>/dev/null || true)
 if [ "$status" -eq 0 ]; then
   if [ "$last_percent" != "100%" ]; then
-    printf '[be a good boy for %s while he installs~ 100%%]\n' "$pc_name"
+    if [ "$style" = "inline" ]; then
+      printf '\r\033[K[be a good boy for %s while he installs~ 100%%]' "$pc_name"
+    else
+      printf '[be a good boy for %s while he installs~ 100%%]\n' "$pc_name"
+    fi
+  fi
+  if [ "$style" = "inline" ]; then
+    printf '\n'
   fi
 else
+  if [ "$style" = "inline" ] && [ -n "$last_percent" ]; then
+    printf '\n'
+  fi
   printf '[%s got denied by %s~ exit %s]\n' "$pc_name" "$cmd" "$status" >&2
 fi
 

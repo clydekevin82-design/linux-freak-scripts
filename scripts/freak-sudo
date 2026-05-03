@@ -11,7 +11,8 @@ fi
 case "${1:-}" in
   apt|apt-get|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
     if command -v freak-run >/dev/null 2>&1; then
-      exec freak-run sudo -p "$prompt" "$@"
+      sudo -v -p "$prompt"
+      exec env FREAK_RUN_MODE=quiet FREAK_RUN_STYLE=inline freak-run sudo -n "$@"
     fi
     ;;
 esac

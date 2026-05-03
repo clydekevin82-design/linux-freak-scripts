@@ -11,6 +11,7 @@ Usage:
   freak-factor uninstall     Remove shell integration
   freak-factor prompt        Print the sudo prompt
   freak-factor name          Print the configured PC name
+  ollama-freak               Start a local Ollama roleplay session
 
 Environment:
   FREAK_SUDO_PROMPT          Override the sudo prompt text
@@ -28,6 +29,7 @@ This enables:
   command wrapper: [be a good boy for PC-NAME while he installs~ 42%]
   wrapped installers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
   aliases: sudo, please, beg, goodboy, confess, behave, strut
+  ollama tool: ollama-freak
   prompt flair: [user@host dir] ~♡
 
 Install with:

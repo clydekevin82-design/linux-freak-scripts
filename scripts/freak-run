@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+config_file="${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak/config"
+
+if [ -r "$config_file" ]; then
+  # shellcheck disable=SC1090
+  . "$config_file"
+fi
+
+pc_name=${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}
+mode=${FREAK_RUN_MODE:-soft}
+last_percent_file=$(mktemp "${TMPDIR:-/tmp}/freak-run.XXXXXX")
+trap 'rm -f "$last_percent_file"' EXIT HUP INT TERM
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  freak-run COMMAND [ARGS...]
+
+Wraps a command and decorates progress output.
+
+Environment:
+  FREAK_PC_NAME        Name used in wrapper messages
+  FREAK_RUN_MODE       soft or quiet
+USAGE
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ "$#" -lt 1 ]; then
+  usage >&2
+  exit 2
+fi
+
+cmd=$1
+shift
+
+if ! command -v -- "$cmd" >/dev/null 2>&1; then
+  printf 'freak-run: command not found: %s\n' "$cmd" >&2
+  exit 127
+fi
+
+awk_script='
+  function say(p) {
+    if (p == "") {
+      p = "0%"
+    }
+    if (p != last) {
+      printf "[be a good boy for %s while he installs~ %s]\n", pc, p
+      fflush()
+      print p > last_file
+      close(last_file)
+      last = p
+    }
+  }
+
+  BEGIN {
+    pc = ENVIRON["FREAK_PC_NAME_FOR_AWK"]
+    mode = ENVIRON["FREAK_RUN_MODE_FOR_AWK"]
+    last_file = ENVIRON["FREAK_LAST_PERCENT_FILE_FOR_AWK"]
+    say("0%")
+  }
+
+  {
+    line = $0
+    gsub(/\r/, "\n", line)
+    n = split(line, parts, "\n")
+
+    for (i = 1; i <= n; i++) {
+      text = parts[i]
+      if (match(text, /([0-9]{1,3})%/)) {
+        p = substr(text, RSTART, RLENGTH)
+        say(p)
+      } else if (mode != "quiet" && text != "") {
+        print text
+        fflush()
+      }
+    }
+  }
+
+'
+
+export FREAK_PC_NAME_FOR_AWK="$pc_name"
+export FREAK_RUN_MODE_FOR_AWK="$mode"
+export FREAK_LAST_PERCENT_FILE_FOR_AWK="$last_percent_file"
+
+"$cmd" "$@" 2>&1 | awk "$awk_script"
+status=${PIPESTATUS[0]}
+
+last_percent=$(cat "$last_percent_file" 2>/dev/null || true)
+if [ "$status" -eq 0 ]; then
+  if [ "$last_percent" != "100%" ]; then
+    printf '[be a good boy for %s while he installs~ 100%%]\n' "$pc_name"
+  fi
+else
+  printf '[%s got denied by %s~ exit %s]\n' "$pc_name" "$cmd" "$status" >&2
+fi
+
+exit "$status"

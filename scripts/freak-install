@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak
+shell_name=$(basename "${SHELL:-sh}")
+
+case "$shell_name" in
+  zsh) rc_file="$HOME/.zshrc" ;;
+  bash) rc_file="$HOME/.bashrc" ;;
+  *) rc_file="$HOME/.profile" ;;
+esac
+
+mkdir -p "$bin_dir" "$config_dir"
+
+cp "$repo_dir/scripts/freak-sudo" "$bin_dir/freak-sudo"
+cp "$repo_dir/scripts/freak-run" "$bin_dir/freak-run"
+cp "$repo_dir/scripts/freak-factor" "$bin_dir/freak-factor"
+cp "$repo_dir/scripts/freak-uninstall" "$bin_dir/freak-uninstall"
+cp "$repo_dir/scripts/freak-shell.sh" "$config_dir/freak-shell.sh"
+chmod 755 "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
+chmod 644 "$config_dir/freak-shell.sh"
+
+if [ ! -r "$config_dir/config" ]; then
+  default_pc_name=$(hostname 2>/dev/null || printf 'the machine')
+  if [ -t 0 ]; then
+    printf 'What should your PC be called when commands beg for it? [%s] ' "$default_pc_name"
+    IFS= read -r pc_name || pc_name=
+    pc_name=${pc_name:-$default_pc_name}
+  else
+    pc_name=$default_pc_name
+  fi
+
+  {
+    printf 'FREAK_PC_NAME=%s\n' "$(printf '%s' "$pc_name" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/")"
+    printf 'FREAK_RUN_MODE=soft\n'
+  } > "$config_dir/config"
+  chmod 600 "$config_dir/config"
+fi
+
+touch "$rc_file"
+
+if ! grep -Fqs '# >>> linux-freak-scripts >>>' "$rc_file"; then
+  {
+    printf '\n# >>> linux-freak-scripts >>>\n'
+    printf '[ -r "$HOME/.config/linux-freak/freak-shell.sh" ] && . "$HOME/.config/linux-freak/freak-shell.sh"\n'
+    printf '# <<< linux-freak-scripts <<<\n'
+  } >> "$rc_file"
+fi
+
+cat <<EOF
+linux-freak-scripts installed.
+
+Added commands:
+  $bin_dir/freak-sudo
+  $bin_dir/freak-run
+  $bin_dir/freak-factor
+  $bin_dir/freak-uninstall
+
+Shell integration:
+  $rc_file
+
+Restart your shell, or run:
+  . "$config_dir/freak-shell.sh"
+EOF

@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+set -eu
+
+prompt=${FREAK_SUDO_PROMPT:-"password? be a good boy~ "}
+
+if ! command -v sudo >/dev/null 2>&1; then
+  printf '%s\n' "freak-sudo: sudo is not installed or not in PATH" >&2
+  exit 127
+fi
+
+case "${1:-}" in
+  apt|apt-get|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
+    if command -v freak-run >/dev/null 2>&1; then
+      exec freak-run sudo -p "$prompt" "$@"
+    fi
+    ;;
+esac
+
+exec sudo -p "$prompt" "$@"

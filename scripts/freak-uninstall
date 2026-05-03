@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+set -eu
+
+bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak
+
+remove_block() {
+  file=$1
+  [ -f "$file" ] || return 0
+  tmp="${file}.linux-freak.$$"
+  awk '
+    /# >>> linux-freak-scripts >>>/ { skipping = 1; next }
+    /# <<< linux-freak-scripts <<</ { skipping = 0; next }
+    skipping != 1 { print }
+  ' "$file" > "$tmp"
+  mv "$tmp" "$file"
+}
+
+remove_block "$HOME/.bashrc"
+remove_block "$HOME/.zshrc"
+remove_block "$HOME/.profile"
+
+rm -f "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
+rm -f "$config_dir/freak-shell.sh" "$config_dir/config"
+rmdir "$config_dir" 2>/dev/null || true
+
+printf '%s\n' "linux-freak-scripts removed."

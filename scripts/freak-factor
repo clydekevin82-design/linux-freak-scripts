@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'USAGE'
+linux-freak-scripts
+
+Usage:
+  freak-factor preview       Show what will be enabled
+  freak-factor install       Install shell integration
+  freak-factor uninstall     Remove shell integration
+  freak-factor prompt        Print the sudo prompt
+  freak-factor name          Print the configured PC name
+
+Environment:
+  FREAK_SUDO_PROMPT          Override the sudo prompt text
+  FREAK_PC_NAME              Override the PC name
+  FREAK_RUN_MODE=quiet       Hide wrapped command output unless it has percent
+  FREAK_PROMPT=0             Disable prompt flair
+USAGE
+}
+
+case "${1:-preview}" in
+  preview)
+    cat <<'PREVIEW'
+This enables:
+  sudo prompt: password? be a good boy~
+  command wrapper: [be a good boy for PC-NAME while he installs~ 42%]
+  wrapped installers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
+  aliases: sudo, please, beg, goodboy, confess, behave, strut
+  prompt flair: [user@host dir] ~♡
+
+Install with:
+  ./scripts/freak-install
+PREVIEW
+    ;;
+  install)
+    exec "$(dirname "$0")/freak-install"
+    ;;
+  uninstall)
+    exec "$(dirname "$0")/freak-uninstall"
+    ;;
+  prompt)
+    printf '%s\n' "${FREAK_SUDO_PROMPT:-"password? be a good boy~ "}"
+    ;;
+  name)
+    config_file="${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak/config"
+    if [ -r "$config_file" ]; then
+      . "$config_file"
+    fi
+    printf '%s\n' "${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

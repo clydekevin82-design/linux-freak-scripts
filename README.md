@@ -68,11 +68,25 @@ number, creates a local session model named `linux-freak-roleplay`, and starts
 an interactive chat. The linux-freak strings are given as reference context,
 not as lines the model should randomly imitate. The launcher hides
 `linux-freak-roleplay` from the picker so you do not accidentally build a new
-roleplay model on top of its own older prompt. Override the session model name
-with:
+roleplay model on top of its own older prompt. It starts Ollama with
+`--think=false` by default so thinking-capable models answer directly, hides
+Ollama setup chatter, and clears the setup questions before chat starts.
+Override the session model name with:
 
 ```sh
 OLLAMA_FREAK_SESSION_MODEL=my-freak-session ollama-freak
+```
+
+Override thinking mode with:
+
+```sh
+OLLAMA_FREAK_THINK=true ollama-freak
+```
+
+Keep the setup questions on screen with:
+
+```sh
+OLLAMA_FREAK_CLEAR_SETUP=0 ollama-freak
 ```
 
 ## Uninstall

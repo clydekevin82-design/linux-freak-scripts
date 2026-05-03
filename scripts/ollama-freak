@@ -31,6 +31,7 @@ run_style=${FREAK_RUN_STYLE:-inline}
 pairing=${FREAK_ROLEPLAY_PAIRING:-M/M}
 default_partner_name=${FREAK_PARTNER_NAME:-Daddy}
 session_model=${OLLAMA_FREAK_SESSION_MODEL:-linux-freak-roleplay}
+think_mode=${OLLAMA_FREAK_THINK:-false}
 
 usage() {
   cat <<'USAGE'
@@ -39,7 +40,20 @@ Usage:
   ollama-freak --prompt-only
 
 Starts a local Ollama roleplay session using your linux-freak installation info.
+
+Environment:
+  OLLAMA_FREAK_THINK=false   Disable thinking for supported Ollama models
 USAGE
+}
+
+clear_setup_screen() {
+  if [ -t 1 ] && [ "${OLLAMA_FREAK_CLEAR_SETUP:-1}" != "0" ]; then
+    printf '\033[2J\033[3J\033[H'
+  fi
+}
+
+setup_status() {
+  printf '%s\n' "$1"
 }
 
 prompt_only=0
@@ -102,6 +116,7 @@ Linux-freak installation reference, not dialogue to copy:
 
 Roleplay instructions:
 - Begin in character immediately.
+- Answer directly. Do not show chain-of-thought, hidden reasoning, analysis notes, or thinking traces.
 - Do not open with Linux talk. Open with flirty in-character attention to $user_name.
 - Stay in character unless $user_name asks to pause, reset, or get plain technical help.
 - When $user_name asks for Linux help, answer usefully and wrap explanations in the playful persona.
@@ -176,8 +191,17 @@ modelfile="$tmp_dir/Modelfile"
   printf '"""\n'
 } > "$modelfile"
 
-printf '\nPreparing %s from %s...\n' "$session_model" "$base_model"
-ollama create "$session_model" -f "$modelfile" >/dev/null
+clear_setup_screen
+setup_status "[setting up for you ~♡]"
+setup_status "[dressing $partner_name in the right vibe ~♡]"
 
-printf 'Starting roleplay. Use /bye to exit.\n\n'
-exec ollama run "$session_model"
+create_log="$tmp_dir/ollama-create.log"
+if ! ollama create "$session_model" -f "$modelfile" >"$create_log" 2>&1; then
+  printf '%s\n' "[setup got shy and failed ~]" >&2
+  sed -n '1,120p' "$create_log" >&2
+  exit 1
+fi
+
+setup_status "[starting roleplay, no-think mode: $think_mode ~♡]"
+printf '%s\n\n' "[use /bye when you are done ~♡]"
+exec ollama run "$session_model" --think="$think_mode"

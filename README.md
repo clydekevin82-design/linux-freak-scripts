@@ -83,6 +83,12 @@ Override thinking mode with:
 OLLAMA_FREAK_THINK=true ollama-freak
 ```
 
+Override the detected thread count with:
+
+```sh
+OLLAMA_FREAK_THREADS=8 ollama-freak
+```
+
 Keep the setup questions on screen with:
 
 ```sh

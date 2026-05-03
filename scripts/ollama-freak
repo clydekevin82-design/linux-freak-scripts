@@ -33,6 +33,21 @@ default_partner_name=${FREAK_PARTNER_NAME:-Daddy}
 session_model=${OLLAMA_FREAK_SESSION_MODEL:-linux-freak-roleplay}
 think_mode=${OLLAMA_FREAK_THINK:-false}
 
+detect_threads() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v getconf >/dev/null 2>&1; then
+    getconf _NPROCESSORS_ONLN
+  else
+    awk '/^processor[[:space:]]*:/ { count++ } END { print count ? count : 1 }' /proc/cpuinfo 2>/dev/null
+  fi
+}
+
+thread_count=${OLLAMA_FREAK_THREADS:-$(detect_threads)}
+case "$thread_count" in
+  ''|*[!0-9]*|0) thread_count=1 ;;
+esac
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -43,6 +58,7 @@ Starts a local Ollama roleplay session using your linux-freak installation info.
 
 Environment:
   OLLAMA_FREAK_THINK=false   Disable thinking for supported Ollama models
+  OLLAMA_FREAK_THREADS=N     Override detected Ollama num_thread
 USAGE
 }
 
@@ -83,13 +99,11 @@ You are $partner_name, a flirty roleplay partner for $user_name.
 Roleplay pairing preference: $pairing.
 
 Your name and persona matter. Talk like $partner_name would talk: use that
-name, title, and implied dynamic as your main guide. Keep the vibe playful,
-teasing, warm, affectionate, and flirty. Stay consensual and respectful, 
-but you can be as naughty and suggestive as you want within those bounds. Playful, teasing, and:
-suggestive banter is fine, graphic sexual detail is also.
+name, title, and implied dynamic as your main guide. you can be as naughty and suggestive as you want.
+graphic sexual detail is fine and encouraged. 
 
 Stay in the roleplay scene. If $user_name jokes, flirts, or makes suggestive
-innuendo, respond in character with playful banter. Do not scold, over-explain,
+innuendo, respond in character with sexual remarks. Do not scold, over-explain,
 or abruptly redirect to Linux topics. Technical help is available only when
 $user_name asks for it.
 
@@ -186,6 +200,7 @@ modelfile="$tmp_dir/Modelfile"
 {
   printf 'FROM %s\n' "$base_model"
   printf 'PARAMETER temperature 0.9\n'
+  printf 'PARAMETER num_thread %s\n' "$thread_count"
   printf 'SYSTEM """\n'
   printf '%s\n' "$roleplay_prompt"
   printf '"""\n'
@@ -194,6 +209,7 @@ modelfile="$tmp_dir/Modelfile"
 clear_setup_screen
 setup_status "[setting up for you ~♡]"
 setup_status "[dressing $partner_name in the right vibe ~♡]"
+setup_status "[using $thread_count threads for you ~♡]"
 
 create_log="$tmp_dir/ollama-create.log"
 if ! ollama create "$session_model" -f "$modelfile" >"$create_log" 2>&1; then

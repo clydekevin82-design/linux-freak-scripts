@@ -41,7 +41,17 @@ Restart your shell, or run:
 ./scripts/ollama-freak --prompt-only
 ```
 
+Add `--info` after the package manager when you want normal package output
+plus the freak progress line:
+
+```sh
+sudo apt --info install cowsay
+apt --info install cowsay
+```
+
 During install, you can choose the PC name used in wrapped command output.
+You can also choose the roleplay pairing preference used by `ollama-freak`:
+`M/M`, `F/F`, `M/F`, or `F/M`.
 After install, edit `~/.config/linux-freak/config` to change it. The default
 wrapper mode hides normal installer output and updates one progress line in
 place. Set `FREAK_RUN_MODE=soft` if you want normal command output too, or
@@ -55,7 +65,11 @@ ollama-freak
 
 It asks what the model should call you, lists installed Ollama models by
 number, creates a local session model named `linux-freak-roleplay`, and starts
-an interactive chat. Override the session model name with:
+an interactive chat. The linux-freak strings are given as reference context,
+not as lines the model should randomly imitate. The launcher hides
+`linux-freak-roleplay` from the picker so you do not accidentally build a new
+roleplay model on top of its own older prompt. Override the session model name
+with:
 
 ```sh
 OLLAMA_FREAK_SESSION_MODEL=my-freak-session ollama-freak

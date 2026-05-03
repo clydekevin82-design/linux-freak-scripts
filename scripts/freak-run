@@ -28,8 +28,12 @@ usage() {
   cat <<'USAGE'
 Usage:
   freak-run COMMAND [ARGS...]
+  freak-run COMMAND --info [ARGS...]
 
 Wraps a command and decorates progress output.
+
+Options:
+  --info                Show command output plus freak progress
 
 Environment:
   FREAK_PC_NAME        Name used in wrapper messages
@@ -50,6 +54,11 @@ fi
 
 cmd=$1
 shift
+
+if [ "${1:-}" = "--info" ]; then
+  mode=soft
+  shift
+fi
 
 if ! command -v -- "$cmd" >/dev/null 2>&1; then
   printf 'freak-run: command not found: %s\n' "$cmd" >&2

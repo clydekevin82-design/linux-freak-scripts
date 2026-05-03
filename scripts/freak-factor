@@ -16,6 +16,7 @@ Usage:
 Environment:
   FREAK_SUDO_PROMPT          Override the sudo prompt text
   FREAK_PC_NAME              Override the PC name
+  FREAK_ROLEPLAY_PAIRING     Override roleplay pairing, e.g. M/M
   FREAK_RUN_MODE=quiet       Hide wrapped command output unless it has percent
   FREAK_PROMPT=0             Disable prompt flair
 USAGE
@@ -27,6 +28,7 @@ case "${1:-preview}" in
 This enables:
   sudo prompt: password? be a good boy~
   command wrapper: [be a good boy for PC-NAME while he installs~ 42%]
+  roleplay pairing setup: M/M, F/F, M/F, or F/M
   wrapped installers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
   aliases: sudo, please, beg, goodboy, confess, behave, strut
   ollama tool: ollama-freak

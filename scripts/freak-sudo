@@ -11,8 +11,15 @@ fi
 case "${1:-}" in
   apt|apt-get|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
     if command -v freak-run >/dev/null 2>&1; then
+      run_mode=quiet
+      package_cmd=$1
+      shift
+      if [ "${1:-}" = "--info" ]; then
+        run_mode=soft
+        shift
+      fi
       sudo -v -p "$prompt"
-      exec env FREAK_RUN_MODE=quiet FREAK_RUN_STYLE=inline freak-run sudo -n "$@"
+      exec env FREAK_RUN_MODE="$run_mode" FREAK_RUN_STYLE=inline freak-run sudo -n "$package_cmd" "$@"
     fi
     ;;
 esac

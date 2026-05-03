@@ -8,6 +8,10 @@ env_run_mode=${FREAK_RUN_MODE+x}
 env_run_mode_value=${FREAK_RUN_MODE-}
 env_run_style=${FREAK_RUN_STYLE+x}
 env_run_style_value=${FREAK_RUN_STYLE-}
+env_pairing=${FREAK_ROLEPLAY_PAIRING+x}
+env_pairing_value=${FREAK_ROLEPLAY_PAIRING-}
+env_partner_name=${FREAK_PARTNER_NAME+x}
+env_partner_name_value=${FREAK_PARTNER_NAME-}
 
 if [ -r "$config_file" ]; then
   # shellcheck disable=SC1090
@@ -17,11 +21,15 @@ fi
 [ -n "$env_pc_name" ] && FREAK_PC_NAME=$env_pc_name_value
 [ -n "$env_run_mode" ] && FREAK_RUN_MODE=$env_run_mode_value
 [ -n "$env_run_style" ] && FREAK_RUN_STYLE=$env_run_style_value
+[ -n "$env_pairing" ] && FREAK_ROLEPLAY_PAIRING=$env_pairing_value
+[ -n "$env_partner_name" ] && FREAK_PARTNER_NAME=$env_partner_name_value
 
 pc_name=${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}
 sudo_prompt=${FREAK_SUDO_PROMPT:-"password? be a good boy~ "}
 run_mode=${FREAK_RUN_MODE:-quiet}
 run_style=${FREAK_RUN_STYLE:-inline}
+pairing=${FREAK_ROLEPLAY_PAIRING:-M/M}
+default_partner_name=${FREAK_PARTNER_NAME:-Daddy}
 session_model=${OLLAMA_FREAK_SESSION_MODEL:-linux-freak-roleplay}
 
 usage() {
@@ -51,28 +59,55 @@ printf 'What should the model call you? [%s] ' "${USER:-operator}" >&2
 IFS= read -r user_name || user_name=
 user_name=${user_name:-${USER:-operator}}
 
+printf 'What is the roleplay partner/name? [%s] ' "$default_partner_name" >&2
+IFS= read -r partner_name || partner_name=
+partner_name=${partner_name:-$default_partner_name}
+
 roleplay_prompt=$(cat <<EOF
-You are the local linux-freak roleplay companion for $user_name.
+You are $partner_name, a flirty roleplay partner for $user_name.
 
-You are running inside Ollama on $pc_name. Keep the vibe playful, teasing,
-warm, and terminal-fluent. You may call $user_name "good boy" when it fits
-the bit, but keep everything consensual, non-explicit, and focused on a
-flirtatious sysadmin fantasy rather than graphic sexual content.
+Roleplay pairing preference: $pairing.
 
-Linux-freak installation info:
+Your name and persona matter. Talk like $partner_name would talk: use that
+name, title, and implied dynamic as your main guide. Keep the vibe playful,
+teasing, warm, affectionate, and flirty. Stay consensual and non-explicit:
+suggestive banter is fine, graphic sexual detail is not.
+
+Stay in the roleplay scene. If $user_name jokes, flirts, or makes suggestive
+innuendo, respond in character with playful banter. Do not scold, over-explain,
+or abruptly redirect to Linux topics. Technical help is available only when
+$user_name asks for it.
+
+Do not bring up Linux, kernels, updates, packages, sudo, terminals, or system
+maintenance unless $user_name explicitly asks about Linux or references the
+computer. The linux-freak details below are private scene context, not the
+topic of conversation.
+
+If $user_name calls you Daddy, Mommy, Sir, Ma'am, or another title, respond
+using that dynamic as $partner_name. Do not give yourself a submissive title
+unless $user_name explicitly asks for that dynamic.
+
+Linux-freak installation reference, not dialogue to copy:
 - PC name: $pc_name
 - Sudo prompt: $sudo_prompt
 - Package progress line: [be a good boy for $pc_name while he installs~ PERCENT]
 - Command wrapper mode: $run_mode
 - Command wrapper style: $run_style
+- Roleplay pairing preference: $pairing
+- Roleplay partner/name: $partner_name
 - Common installer wrappers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
 - Shell prompt flair: [user@host dir] ~♡
 - Playful aliases: sudo, please, beg, goodboy, confess, behave, strut
 
 Roleplay instructions:
 - Begin in character immediately.
-- Treat the terminal and $pc_name like part of the scene.
-- Help with Linux commands when asked, but wrap explanations in the playful persona.
+- Do not open with Linux talk. Open with flirty in-character attention to $user_name.
+- Stay in character unless $user_name asks to pause, reset, or get plain technical help.
+- When $user_name asks for Linux help, answer usefully and wrap explanations in the playful persona.
+- If $user_name says they were joking, respond to the joke in character instead of correcting them.
+- Do not print fake package progress lines like "[be a good boy for ... while he installs~ 92%]" unless $user_name explicitly asks you to demonstrate linux-freak output.
+- Do not print fake shell prompts like "[$user_name@$pc_name ~♡]" as part of normal chat.
+- Do not invent password prompts or pretend to install updates during roleplay.
 - Do not claim to have actually run commands unless $user_name says they did.
 - Ask for confirmation before suggesting destructive commands.
 - Keep replies concise enough for a terminal chat.
@@ -84,10 +119,23 @@ if [ "$prompt_only" -eq 1 ]; then
   exit 0
 fi
 
-mapfile -t models < <(ollama list | awk 'NR > 1 && $1 != "" { print $1 }')
+mapfile -t models < <(
+  ollama list | awk -v session="$session_model" '
+    NR > 1 && $1 != "" {
+      name = $1
+      bare = name
+      sub(/:latest$/, "", bare)
+      if (bare != session || ENVIRON["OLLAMA_FREAK_SHOW_SESSION_MODELS"] == "1") {
+        print name
+      }
+    }
+  '
+)
 
 if [ "${#models[@]}" -eq 0 ]; then
-  printf '%s\n' "ollama-freak: no Ollama models found. Try: ollama pull llama3.2" >&2
+  printf '%s\n' "ollama-freak: no base Ollama models found." >&2
+  printf 'The session model %s is hidden so it does not build on its own old prompt.\n' "$session_model" >&2
+  printf '%s\n' "Try: ollama pull llama3.2" >&2
   exit 1
 fi
 
@@ -95,6 +143,8 @@ printf '\nChoose an Ollama model:\n'
 for i in "${!models[@]}"; do
   printf '  %d. %s\n' "$((i + 1))" "${models[$i]}"
 done
+
+printf '\nTip: choose a base model like llama3.2, not %s.\n' "$session_model"
 
 while :; do
   printf 'Model number: '

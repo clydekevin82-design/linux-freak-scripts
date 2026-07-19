@@ -1,0 +1,207 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak
+
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_main=$(printf '\033[38;5;218m')
+  c_soft=$(printf '\033[38;5;225m')
+  c_good=$(printf '\033[38;5;157m')
+  c_bad=$(printf '\033[38;5;210m')
+  c_reset=$(printf '\033[0m')
+else
+  c_main=; c_soft=; c_good=; c_bad=; c_reset=
+fi
+
+find_tool() {
+  name=$1
+  for dir in /usr/local/bin "$HOME/.local/bin" \
+    "$HOME/Downloads/EgisTec_Fingerprint_Driver/linux_tool/build"; do
+    if [ -x "$dir/$name" ]; then
+      printf '%s/%s' "$dir" "$name"
+      return 0
+    fi
+  done
+  return 1
+}
+
+TOOL_ENROLL=$(find_tool egis057e-enroll || true)
+TOOL_VERIFY=$(find_tool egis057e-verify || true)
+TOOL_LOCK=$(find_tool egis057e-lock || true)
+TOOL_GUI=$(find_tool egis057e-gui || true)
+TOOL_CAM=$(find_tool egis057e-cam || true)
+TOOL_STITCH=$(find_tool egis057e-stitch || true)
+TOOL_LIST="/usr/local/bin/egis057e-enroll $HOME/.local/bin/egis057e-enroll $HOME/Downloads/EgisTec_Fingerprint_Driver/linux_tool/build/egis057e-enroll"
+
+has_any() {
+  for t in "$TOOL_ENROLL" "$TOOL_VERIFY" "$TOOL_LOCK" "$TOOL_GUI"; do
+    [ -n "$t" ] && return 0
+  done
+  return 1
+}
+
+ensure_tools() {
+  if ! has_any; then
+    printf '%sfreak-finger: no fingerprint tools found.%s\n' "$c_bad" "$c_reset" >&2
+    printf '%s  Run %sfreak-finger install%s first.%s\n' "$c_soft" "$c_main" "$c_soft" "$c_reset" >&2
+    exit 1
+  fi
+}
+
+cmd_list() {
+  if has_any; then
+    printf '%sfingerprint tools found:%s\n' "$c_main" "$c_reset"
+    printf '  enroll  %s\n' "${TOOL_ENROLL:-not found}"
+    printf '  verify  %s\n' "${TOOL_VERIFY:-not found}"
+    printf '  lock    %s\n' "${TOOL_LOCK:-not found}"
+    printf '  gui     %s\n' "${TOOL_GUI:-not found}"
+    printf '  cam     %s\n' "${TOOL_CAM:-not found}"
+    printf '  stitch  %s\n' "${TOOL_STITCH:-not found}"
+  else
+    printf '%sno fingerprint tools installed.%s\n' "$c_soft" "$c_reset"
+  fi
+}
+
+cmd_enroll() {
+  ensure_tools
+  name=${1:-right-index}
+  printf '%sEnrolling%s %s~♡%s\n' "$c_main" "$c_reset" "$name" "$c_soft"
+  printf '%sKeep your finger off the sensor until told.%s\n' "$c_soft" "$c_reset"
+  exec "$TOOL_ENROLL" add "$name"
+}
+
+cmd_verify() {
+  ensure_tools
+  name=${1:-}
+  printf '%sTouch the sensor~♡%s\n' "$c_main" "$c_reset"
+  if [ -n "$name" ]; then
+    exec "$TOOL_VERIFY" "$name"
+  else
+    exec "$TOOL_VERIFY"
+  fi
+}
+
+cmd_lock() {
+  ensure_tools
+  printf '%sLock service running~♡%s\n' "$c_soft" "$c_reset"
+  exec "$TOOL_LOCK"
+}
+
+cmd_gui() {
+  ensure_tools
+  printf '%sLaunching fingerprint lab~♡%s\n' "$c_main" "$c_reset"
+  exec "$TOOL_GUI"
+}
+
+cmd_cam() {
+  ensure_tools
+  mode=${1:-stdout}
+  exec "$TOOL_CAM" "$mode"
+}
+
+cmd_stitch() {
+  ensure_tools
+  exec "$TOOL_STITCH" "$@"
+}
+
+cmd_install() {
+  printf '%sInstalling fingerprint tools~♡%s\n' "$c_main" "$c_reset"
+
+  tool_dir="$HOME/Downloads/EgisTec_Fingerprint_Driver/linux_tool"
+  build_dir="$tool_dir/build"
+  bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+  mkdir -p "$bin_dir"
+
+  if [ ! -d "$build_dir" ]; then
+    printf '%sBuilding tools...%s\n' "$c_soft" "$c_reset"
+    if ! cmake -S "$tool_dir" -B "$build_dir" 2>&1; then
+      printf '%sFailed to cmake configure.%s\n' "$c_bad" "$c_reset" >&2
+      exit 1
+    fi
+  fi
+
+  printf '%sBuilding...%s\n' "$c_soft" "$c_reset"
+  if ! make -C "$build_dir" -j"$(nproc)" 2>&1; then
+    printf '%sBuild failed.%s\n' "$c_bad" "$c_reset" >&2
+    exit 1
+  fi
+
+  printf '%sInstalling to %s~♡%s\n' "$c_soft" "$bin_dir" "$c_reset"
+  for t in egis057e egis057e-lock egis057e-stitch egis057e-cam \
+           egis057e-enroll egis057e-verify egis057e-gui; do
+    if [ -f "$build_dir/$t" ]; then
+      cp "$build_dir/$t" "$bin_dir/$t"
+      chmod 755 "$bin_dir/$t"
+      printf '  %s%s%s\n' "$c_good" "$t" "$c_reset"
+    fi
+  done
+
+  printf '\n%sPAM module for sudo/login~♡%s\n' "$c_main" "$c_reset"
+  if [ -f "$build_dir/pam_egis057e.so" ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo install -m 644 "$build_dir/pam_egis057e.so" /usr/lib/x86_64-linux-gnu/security/
+      if ! grep -qs 'pam_egis057e' /etc/pam.d/sudo 2>/dev/null; then
+        printf '%sAdding fingerprint to sudo PAM...%s\n' "$c_soft" "$c_reset"
+        echo 'auth sufficient pam_egis057e.so' | sudo tee -a /etc/pam.d/sudo >/dev/null
+      fi
+      if ! grep -qs 'pam_egis057e' /etc/pam.d/gdm-password 2>/dev/null; then
+        printf '%sAdding fingerprint to GDM login...%s\n' "$c_soft" "$c_reset"
+        sudo sed -i '1a auth sufficient pam_egis057e.so' /etc/pam.d/gdm-password
+      fi
+      printf '%sPAM configured. sudo and GDM login will accept fingerprint.%s\n' "$c_good" "$c_reset"
+    else
+      printf '%sInstall PAM manually:%s\n' "$c_bad" "$c_reset"
+      printf '  sudo install -m 644 %s/pam_egis057e.so /usr/lib/x86_64-linux-gnu/security/\n' "$build_dir"
+    fi
+  else
+    printf '%sPAM module not built. Install libpam0g-dev and rebuild.%s\n' "$c_bad" "$c_reset"
+  fi
+
+  printf '\n%sEnroll a finger?%s [y/N] ' "$c_main" "$c_reset"
+  IFS= read -r do_enroll || do_enroll=
+  case "$do_enroll" in
+    y|Y|yes) cmd_enroll ;;
+    *) printf '%sRun %sfreak-finger enroll%s when ready.%s\n' "$c_soft" "$c_main" "$c_soft" "$c_reset" ;;
+  esac
+}
+
+cmd_help() {
+  cat <<EOF
+${c_main}freak-finger${c_reset} ${c_soft}- fingerprint sensor commands~♡${c_reset}
+
+${c_main}Usage:${c_reset}
+  freak-finger <command> [args]
+
+${c_main}Commands:${c_reset}
+  enroll [name]    Enroll a finger (default: right-index)
+  verify [name]    Verify fingerprint
+  lock             Run lock/unlock daemon
+  gui              Launch graphical fingerprint lab
+  cam <mode>       Camera stream (stdout|display|files|raw)
+  stitch [opts]    Capture and stitch fingerprint composite
+  list             Show installed tools and status
+  install          Build, install, and configure everything
+  help             Show this message
+EOF
+}
+
+cmd="${1:-help}"
+shift 2>/dev/null || true
+
+case "$cmd" in
+  enroll|add)      cmd_enroll "$@" ;;
+  verify|check)    cmd_verify "$@" ;;
+  lock|unlock)     cmd_lock "$@" ;;
+  gui|lab)         cmd_gui "$@" ;;
+  cam|camera)      cmd_cam "$@" ;;
+  stitch)          cmd_stitch "$@" ;;
+  list|status)     cmd_list "$@" ;;
+  install|setup)   cmd_install "$@" ;;
+  help|--help|-h)  cmd_help ;;
+  *)
+    printf '%sfreak-finger: unknown command %s%s\n' "$c_bad" "$cmd" "$c_reset" >&2
+    cmd_help >&2
+    exit 1
+    ;;
+esac

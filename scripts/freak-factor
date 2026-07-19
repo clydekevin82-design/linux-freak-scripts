@@ -1,6 +1,16 @@
 #!/usr/bin/env sh
 set -eu
 
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_main=$(printf '\033[38;5;218m')
+  c_soft=$(printf '\033[38;5;225m')
+  c_reset=$(printf '\033[0m')
+else
+  c_main=
+  c_soft=
+  c_reset=
+fi
+
 usage() {
   cat <<'USAGE'
 linux-freak-scripts
@@ -24,17 +34,18 @@ USAGE
 
 case "${1:-preview}" in
   preview)
-    cat <<'PREVIEW'
-This enables:
+    cat <<PREVIEW
+${c_main}This enables ~♡${c_reset}
   sudo prompt: password? be a good boy~
-  command wrapper: [be a good boy for PC-NAME while he installs~ 42%]
+  command wrapper: ${c_soft}[be a good boy for PC-NAME while he installs~ 42% ♡]${c_reset}
+  live package animation: spinner + percent updates on one terminal line
   roleplay pairing setup: M/M, F/F, M/F, or F/M
   wrapped installers: apt, apt-get, dnf, yum, pacman, zypper, flatpak, snap, paru, yay, emerge, nix, brew
   aliases: sudo, please, beg, goodboy, confess, behave, strut
   ollama tool: ollama-freak
   prompt flair: [user@host dir] ~♡
 
-Install with:
+${c_main}Install with:${c_reset}
   ./scripts/freak-install
 PREVIEW
     ;;

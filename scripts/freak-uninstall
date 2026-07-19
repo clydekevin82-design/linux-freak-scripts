@@ -4,6 +4,16 @@ set -eu
 bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
 config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak
 
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_main=$(printf '\033[38;5;218m')
+  c_soft=$(printf '\033[38;5;225m')
+  c_reset=$(printf '\033[0m')
+else
+  c_main=
+  c_soft=
+  c_reset=
+fi
+
 remove_block() {
   file=$1
   [ -f "$file" ] || return 0
@@ -20,8 +30,8 @@ remove_block "$HOME/.bashrc"
 remove_block "$HOME/.zshrc"
 remove_block "$HOME/.profile"
 
-rm -f "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/ollama-freak" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
+rm -f "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/ollama-freak" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall" "$bin_dir/freak-finger"
 rm -f "$config_dir/freak-shell.sh" "$config_dir/config"
 rmdir "$config_dir" 2>/dev/null || true
 
-printf '%s\n' "linux-freak-scripts removed."
+printf '%slinux-freak-scripts removed%s %s~♡%s\n' "$c_main" "$c_reset" "$c_soft" "$c_reset"

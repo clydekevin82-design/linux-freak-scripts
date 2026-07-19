@@ -6,6 +6,16 @@ bin_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
 config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/linux-freak
 shell_name=$(basename "${SHELL:-sh}")
 
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_main=$(printf '\033[38;5;218m')
+  c_soft=$(printf '\033[38;5;225m')
+  c_reset=$(printf '\033[0m')
+else
+  c_main=
+  c_soft=
+  c_reset=
+fi
+
 case "$shell_name" in
   zsh) rc_file="$HOME/.zshrc" ;;
   bash) rc_file="$HOME/.bashrc" ;;
@@ -19,8 +29,9 @@ cp "$repo_dir/scripts/freak-run" "$bin_dir/freak-run"
 cp "$repo_dir/scripts/ollama-freak" "$bin_dir/ollama-freak"
 cp "$repo_dir/scripts/freak-factor" "$bin_dir/freak-factor"
 cp "$repo_dir/scripts/freak-uninstall" "$bin_dir/freak-uninstall"
+cp "$repo_dir/scripts/freak-finger" "$bin_dir/freak-finger"
 cp "$repo_dir/scripts/freak-shell.sh" "$config_dir/freak-shell.sh"
-chmod 755 "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/ollama-freak" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall"
+chmod 755 "$bin_dir/freak-sudo" "$bin_dir/freak-run" "$bin_dir/ollama-freak" "$bin_dir/freak-factor" "$bin_dir/freak-uninstall" "$bin_dir/freak-finger"
 chmod 644 "$config_dir/freak-shell.sh"
 
 quote_value() {
@@ -48,7 +59,7 @@ choose_pairing() {
 if [ ! -r "$config_dir/config" ]; then
   default_pc_name=$(hostname 2>/dev/null || printf 'the machine')
   if [ -t 0 ]; then
-    printf 'What should your PC be called when commands beg for it? [%s] ' "$default_pc_name"
+    printf '%sWhat should your PC be called when commands beg for it?%s [%s] ' "$c_main" "$c_reset" "$default_pc_name"
     IFS= read -r pc_name || pc_name=
     pc_name=${pc_name:-$default_pc_name}
   else
@@ -80,18 +91,19 @@ if ! grep -Fqs '# >>> linux-freak-scripts >>>' "$rc_file"; then
 fi
 
 cat <<EOF
-linux-freak-scripts installed.
+${c_main}linux-freak-scripts installed ~♡${c_reset}
 
-Added commands:
+${c_soft}Added commands:${c_reset}
   $bin_dir/freak-sudo
   $bin_dir/freak-run
   $bin_dir/ollama-freak
   $bin_dir/freak-factor
   $bin_dir/freak-uninstall
+  $bin_dir/freak-finger
 
-Shell integration:
+${c_soft}Shell integration:${c_reset}
   $rc_file
 
-Restart your shell, or run:
+${c_main}Restart your shell, or run:${c_reset}
   . "$config_dir/freak-shell.sh"
 EOF

@@ -8,10 +8,14 @@ patching PAM, changing `/etc/sudoers`, or making permanent system-wide edits.
 - Adds `freak-sudo`, a tiny wrapper around `sudo` with a custom prompt:
   `password? be a good boy~`
 - Adds `freak-run`, a wrapper for commands that shows progress as:
-  `[be a good boy for PC-NAME while he installs~ 42%]`
+  `[be a good boy for PC-NAME while he installs~ 42% ♡]`
+- Adds live terminal animation for quiet package-manager runs: a colored
+  spinner/progress line updates in place while installers work.
 - Wraps common installers/package managers when they exist: `apt`, `apt-get`,
   `dnf`, `yum`, `pacman`, `zypper`, `flatpak`, `snap`, `paru`, `yay`,
   `emerge`, `nix`, and `brew`.
+- Keeps interactive installer confirmations usable, including common
+  `[Y/n]` and `[y/N]` prompts.
 - Optionally aliases `sudo` to use that prompt in interactive shells.
 - Makes `sudo apt install ...` and similar package-manager invocations use the
   progress wrapper too.
@@ -56,6 +60,11 @@ After install, edit `~/.config/linux-freak/config` to change it. The default
 wrapper mode hides normal installer output and updates one progress line in
 place. Set `FREAK_RUN_MODE=soft` if you want normal command output too, or
 `FREAK_RUN_STYLE=line` if you want every percent update on its own line.
+Set `NO_COLOR=1` to disable color, or tune animation speed with:
+
+```sh
+FREAK_RUN_ANIMATION_INTERVAL=0.10 sudo apt install cowsay
+```
 
 ## Ollama roleplay
 
@@ -93,6 +102,12 @@ Keep the setup questions on screen with:
 
 ```sh
 OLLAMA_FREAK_CLEAR_SETUP=0 ollama-freak
+```
+
+Tune Ollama setup animation speed with:
+
+```sh
+OLLAMA_FREAK_ANIMATION_INTERVAL=0.10 ollama-freak
 ```
 
 ## Uninstall

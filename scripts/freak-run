@@ -21,8 +21,336 @@ fi
 pc_name=${FREAK_PC_NAME:-${HOSTNAME:-$(hostname 2>/dev/null || printf 'the machine')}}
 mode=${FREAK_RUN_MODE:-quiet}
 style=${FREAK_RUN_STYLE:-inline}
+keep_going=${FREAK_RUN_KEEP_GOING:-0}
+confess_file=${FREAK_RUN_CONFESS_FILE:-}
 last_percent_file=$(mktemp "${TMPDIR:-/tmp}/freak-run.XXXXXX")
-trap 'rm -f "$last_percent_file"' EXIT HUP INT TERM
+status_file=$(mktemp "${TMPDIR:-/tmp}/freak-run-status.XXXXXX")
+answer_file=$(mktemp "${TMPDIR:-/tmp}/freak-run-answer.XXXXXX")
+trap 'rm -f "$last_percent_file" "$status_file" "$answer_file"' EXIT HUP INT TERM
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_dim=$(printf '\033[2m')
+  c_main=$(printf '\033[38;5;218m')
+  c_soft=$(printf '\033[38;5;225m')
+  c_reset=$(printf '\033[0m')
+  clear_line=$(printf '\r\033[K')
+else
+  c_dim=
+  c_main=
+  c_soft=
+  c_reset=
+  clear_line=
+fi
+
+progress_message() {
+  percent=$1
+  frame=${2:-♡}
+  printf '%s[%sbe a good boy for %s while he installs~ %s %s%s]' "$c_main" "$c_soft" "$pc_name" "$percent" "$frame" "$c_main"
+  printf '%s' "$c_reset"
+}
+
+remember_progress() {
+  progress=$1
+
+  if [ -z "$progress" ]; then
+    progress='0%'
+  fi
+
+  old_progress=$(cat "$last_percent_file" 2>/dev/null || true)
+  if [ "$progress" != "$old_progress" ]; then
+    if [ "$style" != "inline" ] || [ "$mode" != "quiet" ]; then
+      printf '%s[%sbe a good boy for %s while he installs~ %s%s]\n' "$c_main" "$c_soft" "$pc_name" "$progress" "$c_reset"
+    fi
+    printf '%s' "$progress" > "$last_percent_file"
+  fi
+}
+
+remember_percent() {
+  remember_progress "$1"
+}
+
+progress_from_text() {
+  text=$1
+
+  case "$text" in
+    Hit:*|Get:*|Ign:*|Err:*)
+      printf 'checking repositories'
+      return
+      ;;
+    "Repository: "*)
+      printf 'reading repository'
+      return
+      ;;
+    "Removing repository."*|"Removing entry "*)
+      printf 'removing repository'
+      return
+      ;;
+    "Reading package lists"*)
+      printf 'reading package lists'
+      return
+      ;;
+    "Building dependency tree"*)
+      printf 'building dependency tree'
+      return
+      ;;
+    "Reading state information"*)
+      printf 'reading package state'
+      return
+      ;;
+    "Calculating upgrade"*)
+      printf 'calculating upgrades'
+      return
+      ;;
+    "Need to get "*|"Fetched "*)
+      printf 'fetching packages'
+      return
+      ;;
+    "Preparing to unpack "*)
+      printf 'preparing packages'
+      return
+      ;;
+    "Unpacking "*)
+      printf 'unpacking packages'
+      return
+      ;;
+    "Setting up "*)
+      printf 'setting up packages'
+      return
+      ;;
+    "Processing triggers for "*)
+      printf 'processing triggers'
+      return
+      ;;
+    "E: "*|"Err:"*)
+      printf 'error from installer'
+      return
+      ;;
+    "WARNING: "*)
+      printf 'installer warning'
+      return
+      ;;
+  esac
+
+  printf ''
+}
+
+remember_line_progress() {
+  text=$1
+  progress=$(progress_from_text "$text")
+  [ -n "$progress" ] || return 0
+  remember_progress "$progress"
+}
+
+spin_progress() {
+  target_pid=$1
+  i=0
+
+  while kill -0 "$target_pid" 2>/dev/null; do
+    percent=$(cat "$last_percent_file" 2>/dev/null || printf 'warming up')
+    case $((i % 4)) in
+      0) frame='♡' ;;
+      1) frame='~' ;;
+      2) frame='✦' ;;
+      *) frame='*' ;;
+    esac
+    printf '%s' "$clear_line"
+    progress_message "$percent" "$frame"
+    i=$((i + 1))
+    sleep "${FREAK_RUN_ANIMATION_INTERVAL:-0.18}"
+  done
+}
+
+is_installer_command() {
+  candidate=$1
+
+  case "$candidate" in
+    apt|apt-get|add-apt-repository|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+uses_installer_prompts() {
+  if is_installer_command "$cmd"; then
+    return 0
+  fi
+
+  if [ "$cmd" = "sudo" ]; then
+    for arg in "$@"; do
+      case "$arg" in
+        -*|--*)
+          ;;
+        *)
+          is_installer_command "$arg"
+          return
+          ;;
+      esac
+    done
+  fi
+
+  return 1
+}
+
+wrapped_command_name() {
+  if [ "$cmd" != "sudo" ]; then
+    printf '%s' "$cmd"
+    return
+  fi
+
+  for arg in "$@"; do
+    case "$arg" in
+      -*|--*)
+        ;;
+      *)
+        printf '%s' "$arg"
+        return
+        ;;
+    esac
+  done
+
+  printf '%s' "$cmd"
+}
+
+confession_message() {
+  confession_status=$1
+  confession_answer=$2
+  confession_cmd=$3
+
+  case "$confession_answer" in
+    [Nn]|[Nn][Oo])
+      printf '[%s said no to %s~ exit %s]' "$pc_name" "$confession_cmd" "$confession_status"
+      ;;
+    *)
+      printf '[%s got denied by %s~ exit %s]' "$pc_name" "$confession_cmd" "$confession_status"
+      ;;
+  esac
+}
+
+record_confession() {
+  confession_status=$1
+  confession_answer=$2
+  confession_cmd=$3
+
+  [ -n "$confess_file" ] || return 1
+  confession_message "$confession_status" "$confession_answer" "$confession_cmd" >> "$confess_file" 2>/dev/null
+}
+
+looks_like_yes_no_prompt() {
+  case "$1" in
+    *"[Y/n]: "*|*"[Y/n]:"|*"[Y/n] "*|*"[y/N]: "*|*"[y/N]:"|*"[y/N] "*|*"[y/n]: "*|*"[y/n]:"|*"[y/n] "*|*"[Y/N]: "*|*"[Y/N]:"|*"[Y/N] "*)
+      return 0
+      ;;
+    *"(Y/n): "*|*"(Y/n):"|*"(Y/n) "*|*"(y/N): "*|*"(y/N):"|*"(y/N) "*|*"(y/n): "*|*"(y/n):"|*"(y/n) "*|*"(Y/N): "*|*"(Y/N):"|*"(Y/N) "*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+looks_like_enter_prompt() {
+  case "$1" in
+    *"Press [ENTER] to continue"*|*"Press [ENTER] to continue or Ctrl-c to cancel"*|*"Press [ENTER] to continue or Ctrl-C to cancel"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+run_with_prompt_support() {
+  local char current_line recent prompt_text answer status printed_prompt
+  local child_in child_out child_pid spinner_pid
+
+  printf 'warming up' > "$last_percent_file"
+
+  coproc FREAK_CHILD { "$cmd" "$@" 2>&1; }
+  child_pid=$!
+  child_out=${FREAK_CHILD[0]}
+  child_in=${FREAK_CHILD[1]}
+  current_line=
+  recent=
+  printed_prompt=0
+  spinner_pid=
+
+  start_spinner() {
+    if [ "$mode" = "quiet" ] && [ "$style" = "inline" ] && [ -t 1 ] && [ -z "$spinner_pid" ]; then
+      spin_progress "$child_pid" &
+      spinner_pid=$!
+    fi
+  }
+
+  stop_spinner() {
+    [ -n "$spinner_pid" ] || return 0
+    kill "$spinner_pid" 2>/dev/null || true
+    wait "$spinner_pid" 2>/dev/null || true
+    spinner_pid=
+    printf '%s' "$clear_line"
+  }
+
+  start_spinner
+
+  while IFS= read -r -N 1 -u "$child_out" char 2>/dev/null; do
+    recent="${recent}${char}"
+    if [ "${#recent}" -gt 400 ]; then
+      recent=${recent: -400}
+    fi
+
+    if [ "$mode" != "quiet" ]; then
+      if [ "$printed_prompt" -eq 1 ]; then
+        printed_prompt=0
+      else
+        printf '%s' "$char"
+      fi
+    fi
+
+    if [ "$char" = $'\r' ] || [ "$char" = $'\n' ]; then
+      remember_line_progress "$current_line"
+      current_line=
+    else
+      current_line="${current_line}${char}"
+      if [ "${#current_line}" -gt 300 ]; then
+        current_line=${current_line: -300}
+      fi
+    fi
+
+    if [[ $recent =~ ([0-9]{1,3})% ]]; then
+      remember_percent "${BASH_REMATCH[1]}%"
+    fi
+
+    if looks_like_yes_no_prompt "$current_line" || looks_like_enter_prompt "$current_line"; then
+      prompt_text=$current_line
+      current_line=
+      recent=
+
+      if [ "$mode" = "quiet" ]; then
+        stop_spinner
+        printf '%s' "$clear_line" > /dev/tty
+        printf '%s%s%s' "$c_main" "$prompt_text" "$c_reset" > /dev/tty
+        printed_prompt=1
+      fi
+
+      IFS= read -r answer < /dev/tty || answer=
+      printf '%s\n' "$answer" >&"$child_in"
+      printf '%s' "$answer" > "$answer_file"
+
+      if [ "$mode" = "quiet" ]; then
+        printf '\n' > /dev/tty
+        start_spinner
+      fi
+    fi
+  done
+
+  remember_line_progress "$current_line"
+  stop_spinner
+  { exec {child_out}<&-; } 2>/dev/null || true
+  { exec {child_in}>&-; } 2>/dev/null || true
+  wait "$child_pid"
+  status=$?
+  return "$status"
+}
 
 usage() {
   cat <<'USAGE'
@@ -39,6 +367,8 @@ Environment:
   FREAK_PC_NAME        Name used in wrapper messages
   FREAK_RUN_MODE       soft or quiet
   FREAK_RUN_STYLE      inline or line
+  FREAK_RUN_KEEP_GOING return success after recording command failures
+  FREAK_RUN_CONFESS_FILE file used for delayed failure confessions
 USAGE
 }
 
@@ -65,22 +395,55 @@ if ! command -v -- "$cmd" >/dev/null 2>&1; then
   exit 127
 fi
 
+has_arg() {
+  needle=$1
+  shift
+
+  for arg in "$@"; do
+    [ "$arg" = "$needle" ] && return 0
+  done
+
+  return 1
+}
+
+if [ "$cmd" = "add-apt-repository" ]; then
+  if ! has_arg "-y" "$@" && ! has_arg "--yes" "$@"; then
+    set -- -y "$@"
+  fi
+fi
+
 awk_script='
-  function say(p) {
+  function remember(p) {
     if (p == "") {
       p = "0%"
     }
     if (p != last) {
-      if (style == "inline") {
-        printf "\r\033[K[be a good boy for %s while he installs~ %s]", pc, p
-      } else {
+      if (style != "inline" || mode != "quiet") {
         printf "[be a good boy for %s while he installs~ %s]\n", pc, p
+        fflush()
       }
-      fflush()
       print p > last_file
       close(last_file)
       last = p
     }
+  }
+
+  function status_from_text(text) {
+    if (text ~ /^(Hit:|Get:|Ign:|Err:)/) return "checking repositories"
+    if (text ~ /^Repository: /) return "reading repository"
+    if (text ~ /^Removing repository\./ || text ~ /^Removing entry /) return "removing repository"
+    if (text ~ /^Reading package lists/) return "reading package lists"
+    if (text ~ /^Building dependency tree/) return "building dependency tree"
+    if (text ~ /^Reading state information/) return "reading package state"
+    if (text ~ /^Calculating upgrade/) return "calculating upgrades"
+    if (text ~ /^(Need to get |Fetched )/) return "fetching packages"
+    if (text ~ /^Preparing to unpack /) return "preparing packages"
+    if (text ~ /^Unpacking /) return "unpacking packages"
+    if (text ~ /^Setting up /) return "setting up packages"
+    if (text ~ /^Processing triggers for /) return "processing triggers"
+    if (text ~ /^E: / || text ~ /^Err:/) return "error from installer"
+    if (text ~ /^WARNING: /) return "installer warning"
+    return ""
   }
 
   BEGIN {
@@ -99,12 +462,15 @@ awk_script='
       text = parts[i]
       if (match(text, /([0-9]{1,3})%/)) {
         p = substr(text, RSTART, RLENGTH)
-        say(p)
-      } else if (mode != "quiet" && text != "") {
-        if (style == "inline" && last != "") {
-          printf "\n"
-          last = ""
+        remember(p)
+      } else {
+        p = status_from_text(text)
+        if (p != "") {
+          remember(p)
         }
+      }
+
+      if (mode != "quiet" && text != "") {
         print text
         fflush()
       }
@@ -118,16 +484,34 @@ export FREAK_RUN_MODE_FOR_AWK="$mode"
 export FREAK_RUN_STYLE_FOR_AWK="$style"
 export FREAK_LAST_PERCENT_FILE_FOR_AWK="$last_percent_file"
 
-"$cmd" "$@" 2>&1 | awk "$awk_script"
-status=${PIPESTATUS[0]}
+if [ -t 0 ] && [ -t 1 ] && uses_installer_prompts "$@"; then
+  run_with_prompt_support "$@"
+  status=$?
+elif [ "$style" = "inline" ] && [ "$mode" = "quiet" ] && [ -t 1 ]; then
+  printf 'warming up' > "$last_percent_file"
+  {
+    "$cmd" "$@" 2>&1 | awk "$awk_script"
+    printf '%s\n' "${PIPESTATUS[0]}" > "$status_file"
+  } &
+  pipeline_pid=$!
+  spin_progress "$pipeline_pid"
+  wait "$pipeline_pid"
+  status=$(cat "$status_file" 2>/dev/null || printf '1')
+else
+  "$cmd" "$@" 2>&1 | awk "$awk_script"
+  status=${PIPESTATUS[0]}
+fi
 
 last_percent=$(cat "$last_percent_file" 2>/dev/null || true)
 if [ "$status" -eq 0 ]; then
   if [ "$last_percent" != "100%" ]; then
     if [ "$style" = "inline" ]; then
-      printf '\r\033[K[be a good boy for %s while he installs~ 100%%]' "$pc_name"
+      printf '%s' "$clear_line"
+      progress_message "100%" "♡"
     else
+      printf '%s' "$c_main"
       printf '[be a good boy for %s while he installs~ 100%%]\n' "$pc_name"
+      printf '%s' "$c_reset"
     fi
   fi
   if [ "$style" = "inline" ]; then
@@ -137,7 +521,17 @@ else
   if [ "$style" = "inline" ] && [ -n "$last_percent" ]; then
     printf '\n'
   fi
-  printf '[%s got denied by %s~ exit %s]\n' "$pc_name" "$cmd" "$status" >&2
+  answer=$(cat "$answer_file" 2>/dev/null || true)
+  display_cmd=$(wrapped_command_name "$@")
+  message=$(confession_message "$status" "$answer" "$display_cmd")
+  if [ "$keep_going" = "1" ]; then
+    if ! record_confession "$status" "$answer" "$display_cmd"; then
+      printf '%s%s; keeping going~%s\n' "$c_main" "$message" "$c_reset" >&2
+    fi
+    status=0
+  else
+    printf '%s%s%s\n' "$c_main" "$message" "$c_reset" >&2
+  fi
 fi
 
 exit "$status"

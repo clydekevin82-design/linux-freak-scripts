@@ -3,13 +3,32 @@ set -eu
 
 prompt=${FREAK_SUDO_PROMPT:-"password? be a good boy~ "}
 
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+  c_main=$(printf '\033[38;5;218m')
+  c_reset=$(printf '\033[0m')
+else
+  c_main=
+  c_reset=
+fi
+
 if ! command -v sudo >/dev/null 2>&1; then
-  printf '%s\n' "freak-sudo: sudo is not installed or not in PATH" >&2
+  printf '%sfreak-sudo: sudo is not installed or not in PATH%s\n' "$c_main" "$c_reset" >&2
   exit 127
 fi
 
+has_arg() {
+  needle=$1
+  shift
+
+  for arg in "$@"; do
+    [ "$arg" = "$needle" ] && return 0
+  done
+
+  return 1
+}
+
 case "${1:-}" in
-  apt|apt-get|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
+  apt|apt-get|add-apt-repository|dnf|yum|pacman|zypper|flatpak|snap|paru|yay|emerge|nix|brew)
     if command -v freak-run >/dev/null 2>&1; then
       run_mode=quiet
       package_cmd=$1
@@ -18,8 +37,11 @@ case "${1:-}" in
         run_mode=soft
         shift
       fi
+      if [ "$package_cmd" = "add-apt-repository" ] && ! has_arg "-y" "$@" && ! has_arg "--yes" "$@"; then
+        set -- -y "$@"
+      fi
       sudo -v -p "$prompt"
-      exec env FREAK_RUN_MODE="$run_mode" FREAK_RUN_STYLE=inline freak-run sudo -n "$package_cmd" "$@"
+      exec env FREAK_RUN_MODE="$run_mode" FREAK_RUN_STYLE=inline FREAK_RUN_KEEP_GOING="${FREAK_RUN_KEEP_GOING:-1}" freak-run sudo -n "$package_cmd" "$@"
     fi
     ;;
 esac
